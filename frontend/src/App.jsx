@@ -5,7 +5,7 @@ import ProductTable from './components/ProductTable'
 import ProductModal from './components/ProductModal'
 import WebhookManager from './components/WebhookManager'
 
-const API_URL = 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function App() {
   const [activeTab, setActiveTab] = useState('products')
