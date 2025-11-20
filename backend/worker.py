@@ -115,7 +115,6 @@ def process_csv_task(self: Task, file_path: str):
         except Exception:
             pass
         
-        # Fire webhooks for import.completed event
         result_data = {
             'status': 'completed',
             'total_processed': total_processed,
@@ -124,7 +123,6 @@ def process_csv_task(self: Task, file_path: str):
         }
         
         try:
-            # Query all active webhooks for this event
             db_webhook = SessionLocal()
             try:
                 webhooks = db_webhook.execute(
@@ -151,7 +149,6 @@ def process_csv_task(self: Task, file_path: str):
         return result_data
     
     except Exception as e:
-        # Update state to FAILURE with error details
         self.update_state(
             state='FAILURE',
             meta={
@@ -163,10 +160,17 @@ def process_csv_task(self: Task, file_path: str):
         raise
 
 
-@celery_app.task(name="worker.fire_webhook_task")
-def fire_webhook_task(url: str, payload: dict):
+@celery_app.task(
+    name="worker.fire_webhook_task",
+    bind=True,
+    autoretry_for=(requests.exceptions.RequestException,),
+    retry_backoff=True,
+    retry_kwargs={'max_retries': 5}
+)
+def fire_webhook_task(self, url: str, payload: dict):
     """
     Fire a webhook by sending a POST request to the specified URL.
+    Automatically retries on failure with exponential backoff.
     """
     try:
         response = requests.post(
@@ -175,6 +179,7 @@ def fire_webhook_task(url: str, payload: dict):
             timeout=10,
             headers={'Content-Type': 'application/json'}
         )
+        response.raise_for_status()
         
         return {
             'status': 'success',

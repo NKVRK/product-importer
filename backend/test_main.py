@@ -198,6 +198,30 @@ class TestProductCRUD:
         """Test deleting product that doesn't exist"""
         response = client.delete("/products/99999")
         assert response.status_code == 404
+    
+    def test_batch_delete_products(self, client):
+        """Test batch deleting multiple products"""
+        product_ids = []
+        for i in range(5):
+            response = client.post("/products", json={
+                "sku": f"BATCH-{i:03d}",
+                "name": f"Batch Product {i}",
+                "description": f"Description {i}",
+                "is_active": True
+            })
+            product_ids.append(response.json()["id"])
+        
+        response = client.post("/products/batch-delete", json=product_ids[:3])
+        assert response.status_code == 200
+        assert response.json()["deleted_count"] == 3
+        
+        get_response = client.get("/products")
+        assert get_response.json()["total"] == 2
+    
+    def test_batch_delete_empty_list(self, client):
+        """Test batch delete with empty list"""
+        response = client.post("/products/batch-delete", json=[])
+        assert response.status_code == 400
 
 
 class TestFileUpload:

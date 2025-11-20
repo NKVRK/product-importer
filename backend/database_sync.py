@@ -2,11 +2,12 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Synchronous database URL for Celery workers
-DATABASE_URL_SYNC = os.getenv(
-    "DATABASE_URL_SYNC",
-    "postgresql+psycopg2://postgres:postgres@localhost:5433/products_db"
+DATABASE_URL_ASYNC = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:postgres@localhost:5433/products_db"
 )
+
+DATABASE_URL_SYNC = DATABASE_URL_ASYNC.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
 
 # Create synchronous engine for Celery workers
 engine_sync = create_engine(
@@ -18,7 +19,6 @@ engine_sync = create_engine(
     pool_recycle=3600,  # Recycle connections after 1 hour
 )
 
-# Create session factory
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,

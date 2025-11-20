@@ -108,7 +108,7 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
   const handleBulkDelete = async () => {
     if (window.confirm(`⚠️ Delete ${selectedRows.length} selected products? This cannot be undone.`)) {
       try {
-        await Promise.all(selectedRows.map(id => axios.delete(`${API_URL}/products/${id}`)));
+        await axios.post(`${API_URL}/products/batch-delete`, selectedRows);
         setSelectedRows([]);
         fetchProducts();
       } catch (err) {

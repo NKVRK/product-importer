@@ -1,7 +1,7 @@
 import os
-import shutil
 import time
 import httpx
+import aiofiles
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Request
@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from celery.result import AsyncResult
 from database import engine, Base, get_db
 from models import Product, Webhook
-import models  # Import models to ensure they're registered with Base
 from schemas import ProductResponse, ProductCreate, WebhookCreate, WebhookResponse
 from worker import process_csv_task
 
@@ -48,8 +47,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -98,12 +97,13 @@ async def upload_csv(request: Request, file: UploadFile = File(...)):
     file_path = os.path.join(temp_dir, f"{file.filename}")
     
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            while content := await file.read(1024 * 1024):
+                await out_file.write(content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     finally:
-        file.file.close()
+        await file.close()
     
     task = process_csv_task.delay(file_path)
     
@@ -267,6 +267,33 @@ async def update_product(
     await db.refresh(existing_product)
     
     return ProductResponse.model_validate(existing_product)
+
+
+@app.post("/products/batch-delete")
+async def batch_delete_products(
+    product_ids: list[int],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete multiple products by IDs in a single query.
+    """
+    if not product_ids:
+        raise HTTPException(status_code=400, detail="No product IDs provided")
+    
+    try:
+        result = await db.execute(
+            delete(Product).where(Product.id.in_(product_ids))
+        )
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "deleted_count": result.rowcount,
+            "message": f"Successfully deleted {result.rowcount} products"
+        }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete products: {str(e)}")
 
 
 @app.delete("/products/all")
