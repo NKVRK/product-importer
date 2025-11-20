@@ -1,5 +1,7 @@
 import os
 import shutil
+import time
+import httpx
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
@@ -8,9 +10,9 @@ from sqlalchemy import select, func, or_, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from celery.result import AsyncResult
 from database import engine, Base, get_db
-from models import Product
+from models import Product, Webhook
 import models  # Import models to ensure they're registered with Base
-from schemas import ProductResponse, ProductCreate
+from schemas import ProductResponse, ProductCreate, WebhookCreate, WebhookResponse
 from worker import process_csv_task
 
 
@@ -298,3 +300,106 @@ async def delete_all_products(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete products: {str(e)}")
+
+
+# ==================== WEBHOOK ENDPOINTS ====================
+
+@app.get("/webhooks", response_model=list[WebhookResponse])
+async def get_webhooks(db: AsyncSession = Depends(get_db)):
+    """
+    Get all configured webhooks.
+    """
+    result = await db.execute(select(Webhook).order_by(Webhook.created_at.desc()))
+    webhooks = result.scalars().all()
+    return [WebhookResponse.model_validate(webhook) for webhook in webhooks]
+
+
+@app.post("/webhooks", response_model=WebhookResponse)
+async def create_webhook(
+    webhook: WebhookCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new webhook configuration.
+    """
+    new_webhook = Webhook(
+        url=webhook.url,
+        event_type=webhook.event_type,
+        is_active=webhook.is_active
+    )
+    
+    db.add(new_webhook)
+    await db.commit()
+    await db.refresh(new_webhook)
+    
+    return WebhookResponse.model_validate(new_webhook)
+
+
+@app.delete("/webhooks/{webhook_id}")
+async def delete_webhook(
+    webhook_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete a webhook configuration.
+    """
+    result = await db.execute(
+        select(Webhook).where(Webhook.id == webhook_id)
+    )
+    webhook = result.scalar_one_or_none()
+    
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    await db.execute(delete(Webhook).where(Webhook.id == webhook_id))
+    await db.commit()
+    
+    return {"status": "success", "message": "Webhook deleted successfully"}
+
+
+@app.post("/webhooks/test")
+async def test_webhook(data: dict):
+    """
+    Test a webhook URL by sending a dummy POST request.
+    Measures latency and returns status code.
+    """
+    url = data.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    
+    # Prepare test payload
+    test_payload = {
+        "event": "test",
+        "message": "This is a test webhook",
+        "timestamp": time.time()
+    }
+    
+    start_time = time.time()
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(url, json=test_payload)
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            return {
+                "status": "success",
+                "status_code": response.status_code,
+                "latency_ms": latency_ms,
+                "message": f"Webhook responded with status {response.status_code}"
+            }
+    except httpx.TimeoutException:
+        latency_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "error",
+            "status_code": 0,
+            "latency_ms": latency_ms,
+            "message": "Request timed out after 5 seconds"
+        }
+    except Exception as e:
+        latency_ms = int((time.time() - start_time) * 1000)
+        return {
+            "status": "error",
+            "status_code": 0,
+            "latency_ms": latency_ms,
+            "message": f"Error: {str(e)}"
+        }

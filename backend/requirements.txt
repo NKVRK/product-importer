@@ -7,3 +7,5 @@ celery
 redis
 python-multipart
 pandas
+httpx
+requests

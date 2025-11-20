@@ -1,11 +1,12 @@
 import os
 import pandas as pd
+import requests
 from celery import Task
-from sqlalchemy import insert
+from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from celery_app import celery_app
 from database_sync import SessionLocal
-from models import Product
+from models import Product, Webhook
 
 
 @celery_app.task(bind=True, name="worker.process_csv_task")
@@ -104,12 +105,41 @@ def process_csv_task(self: Task, file_path: str):
         except Exception as e:
             print(f"Warning: Could not delete temp file {file_path}: {e}")
         
-        return {
+        # Fire webhooks for import.completed event
+        result_data = {
             'status': 'completed',
             'total_processed': total_processed,
             'total_rows': total_rows,
             'message': f'Successfully processed {total_processed} products'
         }
+        
+        try:
+            # Query all active webhooks for this event
+            db_webhook = SessionLocal()
+            try:
+                webhooks = db_webhook.execute(
+                    select(Webhook).where(
+                        Webhook.event_type == "import.completed",
+                        Webhook.is_active == True
+                    )
+                ).scalars().all()
+                
+                # Fire webhooks asynchronously
+                webhook_payload = {
+                    'event': 'import.completed',
+                    'data': result_data,
+                    'timestamp': pd.Timestamp.now().isoformat()
+                }
+                
+                for webhook in webhooks:
+                    fire_webhook_task.delay(webhook.url, webhook_payload)
+                    print(f"Queued webhook to {webhook.url}")
+            finally:
+                db_webhook.close()
+        except Exception as webhook_error:
+            print(f"Warning: Failed to fire webhooks: {webhook_error}")
+        
+        return result_data
     
     except Exception as e:
         # Update state to FAILURE with error details
@@ -122,3 +152,45 @@ def process_csv_task(self: Task, file_path: str):
             }
         )
         raise
+
+
+@celery_app.task(name="worker.fire_webhook_task")
+def fire_webhook_task(url: str, payload: dict):
+    """
+    Fire a webhook by sending a POST request to the specified URL.
+    This task runs asynchronously to avoid blocking the main worker.
+    
+    Args:
+        url: Webhook URL to send the request to
+        payload: JSON payload to send
+    """
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=10,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        print(f"Webhook fired to {url}: Status {response.status_code}")
+        
+        return {
+            'status': 'success',
+            'url': url,
+            'status_code': response.status_code,
+            'message': f'Webhook delivered successfully'
+        }
+    except requests.exceptions.Timeout:
+        print(f"Webhook timeout for {url}")
+        return {
+            'status': 'error',
+            'url': url,
+            'message': 'Request timed out'
+        }
+    except Exception as e:
+        print(f"Webhook error for {url}: {str(e)}")
+        return {
+            'status': 'error',
+            'url': url,
+            'message': str(e)
+        }
