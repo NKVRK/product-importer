@@ -1,11 +1,16 @@
 import os
 import shutil
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select, func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 from celery.result import AsyncResult
-from database import engine, Base
+from database import engine, Base, get_db
+from models import Product
 import models  # Import models to ensure they're registered with Base
+from schemas import ProductResponse
 from worker import process_csv_task
 
 
@@ -140,3 +145,50 @@ async def get_upload_status(task_id: str):
         }
     
     return response
+
+
+@app.get("/products")
+async def get_products(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search by SKU or name"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get paginated list of products with optional search.
+    """
+    # Calculate offset
+    offset = (page - 1) * limit
+    
+    # Build base query
+    query = select(Product)
+    count_query = select(func.count(Product.id))
+    
+    # Add search filter if provided
+    if search:
+        search_filter = or_(
+            Product.sku.ilike(f"%{search}%"),
+            Product.name.ilike(f"%{search}%")
+        )
+        query = query.where(search_filter)
+        count_query = count_query.where(search_filter)
+    
+    # Get total count
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+    
+    # Get paginated products
+    query = query.offset(offset).limit(limit).order_by(Product.id.desc())
+    result = await db.execute(query)
+    products = result.scalars().all()
+    
+    # Convert to response schema
+    products_data = [ProductResponse.model_validate(product) for product in products]
+    
+    return {
+        "data": products_data,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit
+    }
