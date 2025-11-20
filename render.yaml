@@ -42,8 +42,9 @@ services:
           type: redis
           property: connectionString
 
-  - type: static
+  - type: web
     name: product-importer-frontend
+    env: static
     buildCommand: "cd frontend && npm install && npm run build"
     staticPublishPath: frontend/dist
     envVars:
