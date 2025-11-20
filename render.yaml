@@ -1,12 +1,14 @@
-services:
-  - type: pserv
-    name: product-importer-db
-    env: postgres
+databases:
+  - name: product-importer-db
     plan: free
+    databaseName: products_db
+    user: postgres
 
+services:
   - type: redis
     name: product-importer-redis
     plan: free
+    ipAllowList: []
 
   - type: web
     name: product-importer-api
@@ -42,8 +44,9 @@ services:
           type: redis
           property: connectionString
 
-  - type: static
+  - type: web
     name: product-importer-frontend
+    env: static
     buildCommand: "cd frontend && npm install && npm run build"
     staticPublishPath: frontend/dist
     envVars:
@@ -51,4 +54,4 @@ services:
         fromService:
           type: web
           name: product-importer-api
-          property: url
+          envVarKey: RENDER_EXTERNAL_URL
