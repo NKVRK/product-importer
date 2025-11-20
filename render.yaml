@@ -2,7 +2,6 @@ databases:
   - name: product-importer-db
     plan: free
     databaseName: products_db
-    user: postgres
 
 services:
   - type: redis
