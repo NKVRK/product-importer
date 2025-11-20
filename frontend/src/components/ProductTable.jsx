@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:8000';
 
-export default function ProductTable({ refreshTrigger }) {
+export default function ProductTable({ refreshTrigger, onEdit }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,6 +59,17 @@ export default function ProductTable({ refreshTrigger }) {
   const handleNext = () => {
     if (page < totalPages) {
       setPage(page + 1);
+    }
+  };
+
+  const handleDelete = async (productId, productName) => {
+    if (window.confirm(`Are you sure you want to delete "${productName}"?`)) {
+      try {
+        await axios.delete(`${API_URL}/products/${productId}`);
+        fetchProducts(); // Refresh the table
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Failed to delete product');
+      }
     }
   };
 
@@ -137,12 +148,15 @@ export default function ProductTable({ refreshTrigger }) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {products.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
                       No products found. Upload a CSV file to get started.
                     </td>
                   </tr>
@@ -172,6 +186,24 @@ export default function ProductTable({ refreshTrigger }) {
                             Inactive
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => onEdit(product)}
+                            className="text-blue-600 hover:text-blue-900 font-medium"
+                            title="Edit"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.id, product.name)}
+                            className="text-red-600 hover:text-red-900 font-medium"
+                            title="Delete"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

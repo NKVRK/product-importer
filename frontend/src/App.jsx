@@ -1,31 +1,108 @@
 import { useState } from 'react'
+import axios from 'axios'
 import FileUpload from './components/FileUpload'
 import ProductTable from './components/ProductTable'
+import ProductModal from './components/ProductModal'
+
+const API_URL = 'http://localhost:8000'
 
 function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingProduct, setEditingProduct] = useState(null)
 
   const handleUploadComplete = () => {
     // Trigger refresh of product table
     setRefreshTrigger(prev => prev + 1)
   }
 
+  const handleAddProduct = () => {
+    setEditingProduct(null)
+    setIsModalOpen(true)
+  }
+
+  const handleEditProduct = (product) => {
+    setEditingProduct(product)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setEditingProduct(null)
+  }
+
+  const handleModalSubmit = async (formData) => {
+    try {
+      if (editingProduct) {
+        // Update existing product
+        await axios.put(`${API_URL}/products/${editingProduct.id}`, formData)
+      } else {
+        // Create new product
+        await axios.post(`${API_URL}/products`, formData)
+      }
+      
+      handleCloseModal()
+      setRefreshTrigger(prev => prev + 1)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to save product')
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    if (window.confirm('WARNING: This will delete ALL products. This action cannot be undone. Are you sure?')) {
+      try {
+        await axios.delete(`${API_URL}/products/all`)
+        setRefreshTrigger(prev => prev + 1)
+        alert('All products deleted successfully')
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Failed to delete products')
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">Product Importer</h1>
-          <p className="mt-2 text-gray-600">
-            Upload and manage your product catalog with ease
-          </p>
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900">Product Importer</h1>
+            <p className="mt-2 text-gray-600">
+              Upload and manage your product catalog with ease
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleAddProduct}
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium transition-colors"
+            >
+              + Add Product
+            </button>
+            <button
+              onClick={handleDeleteAll}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 font-medium transition-colors"
+            >
+              Delete All
+            </button>
+          </div>
         </div>
 
         {/* File Upload Component */}
         <FileUpload onUploadComplete={handleUploadComplete} />
 
         {/* Product Table Component */}
-        <ProductTable refreshTrigger={refreshTrigger} />
+        <ProductTable 
+          refreshTrigger={refreshTrigger} 
+          onEdit={handleEditProduct}
+        />
+
+        {/* Product Modal */}
+        <ProductModal
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onSubmit={handleModalSubmit}
+          initialData={editingProduct}
+        />
       </div>
     </div>
   )

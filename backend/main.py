@@ -4,13 +4,13 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from celery.result import AsyncResult
 from database import engine, Base, get_db
 from models import Product
 import models  # Import models to ensure they're registered with Base
-from schemas import ProductResponse
+from schemas import ProductResponse, ProductCreate
 from worker import process_csv_task
 
 
@@ -192,3 +192,109 @@ async def get_products(
         "limit": limit,
         "total_pages": (total + limit - 1) // limit
     }
+
+
+@app.post("/products", response_model=ProductResponse)
+async def create_product(
+    product: ProductCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new product.
+    """
+    # Check if SKU already exists
+    existing = await db.execute(
+        select(Product).where(Product.sku == product.sku)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Product with this SKU already exists")
+    
+    # Create new product
+    new_product = Product(
+        sku=product.sku,
+        name=product.name,
+        description=product.description,
+        is_active=product.is_active
+    )
+    
+    db.add(new_product)
+    await db.commit()
+    await db.refresh(new_product)
+    
+    return ProductResponse.model_validate(new_product)
+
+
+@app.put("/products/{product_id}", response_model=ProductResponse)
+async def update_product(
+    product_id: int,
+    product: ProductCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update an existing product.
+    """
+    # Get existing product
+    result = await db.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    existing_product = result.scalar_one_or_none()
+    
+    if not existing_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Update fields
+    existing_product.name = product.name
+    existing_product.description = product.description
+    existing_product.is_active = product.is_active
+    # Note: SKU is not updated (it's the unique identifier)
+    
+    await db.commit()
+    await db.refresh(existing_product)
+    
+    return ProductResponse.model_validate(existing_product)
+
+
+@app.delete("/products/{product_id}")
+async def delete_product(
+    product_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete a single product by ID.
+    """
+    # Get existing product
+    result = await db.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Delete the product
+    await db.execute(
+        delete(Product).where(Product.id == product_id)
+    )
+    await db.commit()
+    
+    return {"status": "success", "message": "Product deleted successfully"}
+
+
+@app.delete("/products/all")
+async def delete_all_products(db: AsyncSession = Depends(get_db)):
+    """
+    Delete ALL products using TRUNCATE for performance.
+    CRITICAL: Uses TRUNCATE TABLE for instant deletion of 500k+ rows.
+    """
+    try:
+        # Use TRUNCATE for instant deletion (much faster than DELETE for large datasets)
+        await db.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "message": "All products deleted successfully"
+        }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete products: {str(e)}")

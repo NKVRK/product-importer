@@ -10,8 +10,8 @@ class ProductBase(BaseModel):
 
 
 class ProductCreate(ProductBase):
-    """Schema for creating a new product"""
-    pass
+    """Schema for creating/updating a product"""
+    is_active: bool = Field(default=True, description="Whether the product is active")
 
 
 class ProductResponse(ProductBase):
