@@ -42,7 +42,6 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
       setTotal(response.data.total);
       setTotalPages(response.data.total_pages);
       
-      // Notify parent of total count for Delete All button
       if (onTotalChange) {
         onTotalChange(response.data.total);
       }
@@ -61,7 +60,7 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
     e.preventDefault();
     if (searchInput.trim()) {
       setSearch(searchInput.trim());
-      setPage(1); // Reset to first page on new search
+      setPage(1);
     }
   };
 
@@ -113,7 +112,7 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
         setSelectedRows([]);
         fetchProducts();
       } catch (err) {
-        alert('Failed to delete some products');
+        console.error('Failed to delete products:', err);
       }
     }
   };
@@ -122,9 +121,9 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
     if (window.confirm(`Are you sure you want to delete "${productName}"?`)) {
       try {
         await axios.delete(`${API_URL}/products/${productId}`);
-        fetchProducts(); // Refresh the table
+        fetchProducts();
       } catch (err) {
-        alert(err.response?.data?.detail || 'Failed to delete product');
+        console.error('Failed to delete product:', err);
       }
     }
   };
@@ -171,8 +170,8 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
                 id="search"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search products..."
-                className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                placeholder="Search by SKU, Name..."
+                className="block w-full pl-10 pr-3 py-2.5 border-2 border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm"
               />
             </div>
             {search && (
@@ -275,31 +274,37 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {product.is_active ? (
-                          <span className="bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                            ● Active
-                          </span>
-                        ) : (
-                          <span className="bg-gradient-to-r from-slate-100 to-slate-200 text-slate-600 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                            ○ Inactive
-                          </span>
-                        )}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          product.is_active 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}>
+                          {product.is_active ? 'Active' : 'Inactive'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => onEdit(product)}
-                          className="text-emerald-600 hover:text-emerald-700 font-semibold mr-4 hover:underline transition-colors"
-                          title="Edit product"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id, product.name)}
-                          className="text-rose-600 hover:text-rose-700 font-semibold hover:underline transition-colors"
-                          title="Delete product"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => onEdit(product)}
+                            className="inline-flex items-center px-3 py-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-semibold rounded-lg transition-all border border-emerald-200"
+                            title="Edit product"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.id, product.name)}
+                            className="inline-flex items-center px-3 py-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 font-semibold rounded-lg transition-all border border-rose-200"
+                            title="Delete product"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:8000';
 
-export default function FileUpload({ onUploadComplete }) {
+export default function FileUpload({ onUploadComplete, onProcessingChange }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [taskId, setTaskId] = useState(null);
@@ -15,11 +15,6 @@ export default function FileUpload({ onUploadComplete }) {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
       if (selectedFile.name.endsWith('.csv')) {
-        // Display file size info for large files
-        const fileSizeMB = (selectedFile.size / (1024 * 1024)).toFixed(2);
-        if (selectedFile.size > 10 * 1024 * 1024) { // > 10MB
-          console.log(`Large file selected: ${fileSizeMB} MB - This may take a while to process`);
-        }
         setFile(selectedFile);
         setError(null);
         setStatus(null);
@@ -33,6 +28,10 @@ export default function FileUpload({ onUploadComplete }) {
   };
 
   const handleUpload = async () => {
+    if (onProcessingChange) {
+      onProcessingChange(true);
+    }
+    
     if (!file) {
       setError('Please select a file first');
       return;
@@ -57,10 +56,13 @@ export default function FileUpload({ onUploadComplete }) {
     } catch (err) {
       setError(err.response?.data?.detail || 'Upload failed');
       setUploading(false);
+      
+      if (onProcessingChange) {
+        onProcessingChange(false);
+      }
     }
   };
 
-  // Poll for task status
   useEffect(() => {
     if (!taskId) return;
 
@@ -76,15 +78,19 @@ export default function FileUpload({ onUploadComplete }) {
           clearInterval(pollInterval);
           setUploading(false);
           setStatus('Upload completed successfully!');
+          setUploading(false);
           setFile(null);
-          setTaskId(null);
-          
-          // Notify parent component
+          setProgress(null);
+          setStatus(null);
+      
+          if (onProcessingChange) {
+            onProcessingChange(false);
+          }
+      
           if (onUploadComplete) {
             onUploadComplete();
           }
 
-          // Reset after 3 seconds
           setTimeout(() => {
             setStatus(null);
             setProgress(null);
@@ -96,9 +102,9 @@ export default function FileUpload({ onUploadComplete }) {
           setTaskId(null);
         }
       } catch (err) {
-        console.error('Error polling status:', err);
+        // Silently handle polling errors
       }
-    }, 2000); // Poll every 2 seconds
+    }, 2000);
 
     return () => clearInterval(pollInterval);
   }, [taskId, onUploadComplete]);
@@ -159,7 +165,7 @@ export default function FileUpload({ onUploadComplete }) {
             </button>
           </div>
         ) : (
-          <div className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center hover:border-emerald-400 hover:bg-emerald-50/50 transition-all duration-200">
+          <div className="border-3 border-dashed border-slate-400 rounded-2xl p-8 text-center hover:border-emerald-500 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-200">
               <div className="space-y-1">
                 <svg
                   className="mx-auto h-12 w-12 text-gray-400"
@@ -193,7 +199,9 @@ export default function FileUpload({ onUploadComplete }) {
                   </label>
                   <p className="pl-1">or drag and drop</p>
                 </div>
-                <p className="text-xs text-slate-500 text-center">CSV files only</p>
+                <div className="mt-2 px-3 py-1 bg-slate-100 rounded-md inline-block">
+                  <p className="text-xs font-semibold text-slate-700">📄 CSV files only</p>
+                </div>
               </div>
           </div>
         )}
@@ -213,101 +221,104 @@ export default function FileUpload({ onUploadComplete }) {
             </button>
           </div>
         ) : (
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <div className="relative">
-                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-              </div>
-              <span className="text-sm font-bold text-blue-900">Processing Import</span>
-            </div>
-            <p className="text-xs text-center text-blue-700 font-medium">
-              ⚠️ Do not close this page — processing will continue automatically
-            </p>
-          </div>
-        )}
-
-        {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              {/* Stage 1: Upload */}
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-emerald-500 text-white">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-red-800">{error}</p>
+                <span className="text-xs font-semibold text-emerald-700">Upload</span>
+              </div>
+
+              <div className="flex-1 h-1 bg-emerald-500 mx-2 rounded"></div>
+
+              {/* Stage 2: Validated */}
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-emerald-500 text-white">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
                 </div>
+                <span className="text-xs font-semibold text-emerald-700">Validated</span>
+              </div>
+
+              <div className={`flex-1 h-1 mx-2 rounded ${progress ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+
+              {/* Stage 3: Importing */}
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  progress ? 'bg-blue-500 text-white animate-pulse' : 'bg-slate-300 text-slate-500'
+                }`}>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className={`text-xs font-semibold ${progress ? 'text-blue-700' : 'text-slate-500'}`}>Importing</span>
+              </div>
+
+              <div className="flex-1 h-1 bg-slate-300 mx-2 rounded"></div>
+
+              {/* Stage 4: Complete */}
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-300 text-slate-500">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className="text-xs font-semibold text-slate-500">Complete</span>
               </div>
             </div>
-          )}
-
-          {status && !error && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-5 shadow-lg">
-                      {/* Stage Indicators */}
-                      <div className="grid grid-cols-4 gap-2 mb-4 text-xs">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                          <span className="font-bold text-emerald-700 text-center">✓ Upload</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                          <span className="font-bold text-emerald-700 text-center">✓ Validated</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                          <span className="font-bold text-blue-700 text-center">▶ Importing</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-2 h-2 bg-slate-300 rounded-full"></div>
-                          <span className="font-medium text-slate-500 text-center">⏳ Finalizing</span>
-                        </div>
-                      </div>
-                      
-                      {/* Main Status */}
-                      <p className="font-bold text-blue-900 mb-3 text-center">{status}</p>
-                      
-                      {progress && (
-                        <>
-                          {/* Progress Bar */}
-                          <div className="mb-3">
-                            <div className="flex justify-between text-sm mb-2">
-                              <span className="font-semibold text-slate-700">
-                                Progress: {progress.current.toLocaleString()} / {progress.total.toLocaleString()}
-                              </span>
-                              <span className="font-bold text-blue-600">{getProgressPercentage()}%</span>
-                            </div>
-                            <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
-                              <div
-                                className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300 shadow-md"
-                                style={{ width: `${getProgressPercentage()}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          
-                          {/* ETA and Batch Info */}
-                          <div className="grid grid-cols-2 gap-3 text-xs mb-3">
-                            <div className="bg-white/60 rounded-lg p-2 text-center border border-blue-100">
-                              <p className="text-slate-500 font-medium">Estimated Time</p>
-                              <p className="text-blue-700 font-bold text-sm mt-1">~2-3 min</p>
-                            </div>
-                            <div className="bg-white/60 rounded-lg p-2 text-center border border-blue-100">
-                              <p className="text-slate-500 font-medium">Batch Progress</p>
-                              <p className="text-blue-700 font-bold text-sm mt-1">
-                                {Math.ceil(progress.current / 1000)} / {Math.ceil(progress.total / 1000)}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          {/* Info Message */}
-                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
-                            <p className="text-xs text-amber-800 text-center font-medium">
-                              💡 Products will appear in the table once import completes
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-          )}
+            
+            {progress && (
+              <div className="mt-4">
+                {/* Progress Bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="font-semibold text-slate-700">
+                      Progress: {progress?.current?.toLocaleString() || 0} / {progress?.total?.toLocaleString() || 0}
+                    </span>
+                    <span className="font-bold text-blue-600">{getProgressPercentage()}%</span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300 shadow-md"
+                      style={{ width: `${getProgressPercentage()}%` }}
+                    ></div>
+                  </div>
+                </div>
+                
+                {/* ETA and Batch Info */}
+                <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                  <div className="bg-white/60 rounded-lg p-2 text-center border border-blue-100">
+                    <p className="text-slate-500 font-medium">Estimated Time</p>
+                    <p className="text-blue-700 font-bold text-sm mt-1">~2-3 min</p>
+                  </div>
+                  <div className="bg-white/60 rounded-lg p-2 text-center border border-blue-100">
+                    <p className="text-slate-500 font-medium">Batch Progress</p>
+                    <p className="text-blue-700 font-bold text-sm mt-1">
+                      {Math.ceil((progress?.current || 0) / 1000)} / {Math.ceil((progress?.total || 0) / 1000)}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Info Message */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  <p className="text-xs text-amber-800 text-center font-medium">
+                    💡 Products will appear in the table once import completes
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-red-800">{error}</p>
+          </div>
+        )}
       </div>
     </div>
   );

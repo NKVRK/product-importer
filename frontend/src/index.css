@@ -18,10 +18,6 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
-
-/* Removed default Vite button and heading styles to let Tailwind control everything */
-
-/* Toast notification animation */
 @keyframes slide-in {
   from {
     transform: translateX(100%);

@@ -30,10 +30,7 @@ Base = declarative_base()
 
 
 def get_sync_db():
-    """
-    Get a synchronous database session.
-    Use with context manager for automatic cleanup.
-    """
+    """Get a synchronous database session."""
     db = SessionLocal()
     try:
         return db

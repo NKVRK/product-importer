@@ -4,8 +4,11 @@ import time
 import httpx
 from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select, func, or_, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from celery.result import AsyncResult
@@ -18,21 +21,18 @@ from worker import process_csv_task
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifespan context manager for startup and shutdown events.
-    Creates database tables on startup.
-    """
-    # Startup: Create database tables
+    """Lifespan context manager for startup and shutdown events."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
     yield
     
-    # Shutdown: Clean up resources
     await engine.dispose()
 
 
-# Initialize FastAPI application
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="Product Importer API",
     description="API for managing product imports and data",
@@ -40,10 +40,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS middleware
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Frontend URL
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,20 +70,31 @@ async def root():
 
 
 @app.post("/upload")
-async def upload_csv(file: UploadFile = File(...)):
+@limiter.limit("5/minute")
+async def upload_csv(request: Request, file: UploadFile = File(...)):
     """
     Upload CSV file for processing.
     Returns task_id for tracking progress.
+    Maximum file size: 100MB
+    Rate limit: 5 uploads per minute
     """
-    # Validate file type
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
     
-    # Create temp directory if it doesn't exist
+    MAX_FILE_SIZE = 100 * 1024 * 1024
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is 100MB. Your file is {file_size / (1024 * 1024):.2f}MB"
+        )
+    
     temp_dir = "temp"
     os.makedirs(temp_dir, exist_ok=True)
     
-    # Save uploaded file to temp directory
     file_path = os.path.join(temp_dir, f"{file.filename}")
     
     try:
@@ -91,7 +105,6 @@ async def upload_csv(file: UploadFile = File(...)):
     finally:
         file.file.close()
     
-    # Trigger Celery task
     task = process_csv_task.delay(file_path)
     
     return {
@@ -257,14 +270,14 @@ async def update_product(
 
 
 @app.delete("/products/all")
-async def delete_all_products(db: AsyncSession = Depends(get_db)):
+@limiter.limit("3/hour")
+async def delete_all_products(request: Request, db: AsyncSession = Depends(get_db)):
     """
     Delete ALL products using TRUNCATE for performance.
     CRITICAL: Uses TRUNCATE TABLE for instant deletion of 500k+ rows.
-    NOTE: This route must be defined BEFORE /products/{product_id} to avoid path conflicts.
+    Rate limit: 3 deletions per hour
     """
     try:
-        # Use TRUNCATE for instant deletion (much faster than DELETE for large datasets)
         await db.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
         await db.commit()
         
@@ -282,10 +295,7 @@ async def delete_product(
     product_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Delete a single product by ID.
-    """
-    # Get existing product
+    """Delete a single product by ID."""
     result = await db.execute(
         select(Product).where(Product.id == product_id)
     )
@@ -294,7 +304,6 @@ async def delete_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Delete the product
     await db.execute(
         delete(Product).where(Product.id == product_id)
     )

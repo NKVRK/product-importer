@@ -11,7 +11,6 @@ export default function WebhookManager() {
   const [toast, setToast] = useState(null);
   const [urlError, setUrlError] = useState('');
   
-  // Show toast notification
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -39,21 +38,19 @@ export default function WebhookManager() {
     const trimmedUrl = newUrl.trim();
     
     if (!trimmedUrl) {
-      alert('Please enter a URL');
+      setUrlError('Please enter a URL');
       return;
     }
     
-    // Basic URL validation
     try {
       new URL(trimmedUrl);
     } catch {
-      alert('Please enter a valid URL (e.g., https://example.com/webhook)');
+      setUrlError('Please enter a valid URL (e.g., https://example.com/webhook)');
       return;
     }
     
-    // Check for duplicate URLs
     if (webhooks.some(webhook => webhook.url === trimmedUrl)) {
-      alert('This webhook URL already exists');
+      setUrlError('This webhook URL already exists');
       return;
     }
 
