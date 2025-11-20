@@ -2,10 +2,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Synchronous database URL for Celery workers (using psycopg2)
+# Synchronous database URL for Celery workers
 DATABASE_URL_SYNC = os.getenv(
     "DATABASE_URL_SYNC",
-    "postgresql://postgres:postgres@localhost:5432/products_db"
+    "postgresql+psycopg2://postgres:postgres@localhost:5433/products_db"
 )
 
 # Create synchronous engine for Celery workers

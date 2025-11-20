@@ -5,7 +5,7 @@ from sqlalchemy.orm import declarative_base
 # Database URL from environment or default to local docker-compose setup
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/products_db"
+    "postgresql+asyncpg://postgres:postgres@localhost:5433/products_db"
 )
 
 # Create async engine

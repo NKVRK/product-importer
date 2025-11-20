@@ -12,6 +12,7 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
+  const [totalProducts, setTotalProducts] = useState(0)
 
   const handleUploadComplete = () => {
     // Trigger refresh of product table
@@ -63,71 +64,136 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Product Importer</h1>
-          <p className="mt-2 text-sm text-gray-500">
-            Upload and manage your product catalog with ease
-          </p>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200 mb-8">
-          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab('products')}
-              className={`${
-                activeTab === 'products'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-            >
-              Products
-            </button>
-            <button
-              onClick={() => setActiveTab('webhooks')}
-              className={`${
-                activeTab === 'webhooks'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-            >
-              Webhooks
-            </button>
-          </nav>
-        </div>
-
-        {/* Products Tab */}
-        {activeTab === 'products' && (
-          <div className="space-y-6">
-            {/* File Upload Component */}
-            <FileUpload onUploadComplete={handleUploadComplete} />
-
-            {/* Product Table Component */}
-            <ProductTable 
-              refreshTrigger={refreshTrigger} 
-              onEdit={handleEditProduct}
-              onAddProduct={handleAddProduct}
-              onDeleteAll={handleDeleteAll}
-            />
-
-            {/* Product Modal */}
-            <ProductModal
-              isOpen={isModalOpen}
-              onClose={handleCloseModal}
-              onSubmit={handleModalSubmit}
-              initialData={editingProduct}
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Top Navigation Bar */}
+      <nav className="bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Left: Brand */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Product Importer</h1>
+                <p className="text-xs text-slate-500">Enterprise Dashboard</p>
+              </div>
+            </div>
+            
+            {/* Right: Navigation Tabs */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveTab('products')}
+                className={`${
+                  activeTab === 'products'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                } inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Products
+              </button>
+              <button
+                onClick={() => setActiveTab('webhooks')}
+                className={`${
+                  activeTab === 'webhooks'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                } inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Webhooks
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      </nav>
 
-        {/* Webhooks Tab */}
-        {activeTab === 'webhooks' && (
-          <WebhookManager />
-        )}
-      </div>
+      {/* Main Content Area */}
+      <main className="min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Products Tab */}
+          {activeTab === 'products' && (
+            <>
+              {/* Page Header */}
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="text-3xl font-bold text-slate-800">Product Catalog</h2>
+                  <p className="mt-2 text-sm text-slate-500 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Manage your product inventory with ease
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDeleteAll}
+                    disabled={totalProducts === 0}
+                    className="inline-flex items-center px-5 py-2.5 bg-white text-rose-600 border-2 border-rose-200 rounded-xl hover:bg-rose-50 hover:border-rose-300 text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete All
+                  </button>
+                  <button
+                    onClick={handleAddProduct}
+                    className="inline-flex items-center px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 text-sm font-semibold transition-all duration-200 shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Product
+                  </button>
+                </div>
+              </div>
+
+              {/* File Upload Component */}
+              <FileUpload onUploadComplete={handleUploadComplete} />
+
+              {/* Product Table Component */}
+              <ProductTable 
+                refreshTrigger={refreshTrigger} 
+                onEdit={handleEditProduct}
+                onTotalChange={setTotalProducts}
+              />
+
+              {/* Product Modal */}
+              <ProductModal
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                onSubmit={handleModalSubmit}
+                initialData={editingProduct}
+              />
+            </>
+          )}
+
+          {/* Webhooks Tab */}
+          {activeTab === 'webhooks' && (
+            <>
+              {/* Page Header */}
+              <div className="mb-8">
+                <h2 className="text-3xl font-bold text-slate-800">Webhook Configuration</h2>
+                <p className="mt-2 text-sm text-slate-500 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Configure webhooks to receive real-time notifications
+                </p>
+              </div>
+              
+              <WebhookManager />
+            </>
+          )}
+        </div>
+      </main>
     </div>
   )
 }

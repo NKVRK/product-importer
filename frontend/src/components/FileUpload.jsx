@@ -13,12 +13,22 @@ export default function FileUpload({ onUploadComplete }) {
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    if (selectedFile && selectedFile.name.endsWith('.csv')) {
-      setFile(selectedFile);
-      setError(null);
-    } else {
-      setError('Please select a CSV file');
-      setFile(null);
+    if (selectedFile) {
+      if (selectedFile.name.endsWith('.csv')) {
+        // Display file size info for large files
+        const fileSizeMB = (selectedFile.size / (1024 * 1024)).toFixed(2);
+        if (selectedFile.size > 10 * 1024 * 1024) { // > 10MB
+          console.log(`Large file selected: ${fileSizeMB} MB - This may take a while to process`);
+        }
+        setFile(selectedFile);
+        setError(null);
+        setStatus(null);
+        setProgress(null);
+      } else {
+        setError('Please select a CSV file');
+        setFile(null);
+        e.target.value = null;
+      }
     }
   };
 
@@ -99,22 +109,58 @@ export default function FileUpload({ onUploadComplete }) {
   };
 
   return (
-    <div className="bg-white shadow sm:rounded-lg">
-      <div className="px-4 py-5 sm:p-6">
-        <h3 className="text-lg leading-6 font-medium text-gray-900">
-          Upload Products CSV
-        </h3>
-        <div className="mt-2 max-w-xl text-sm text-gray-500">
-          <p>Upload a CSV file to import products into your catalog.</p>
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-8 border border-slate-200">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+          <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
         </div>
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">Quick Upload</h3>
+          <p className="text-sm text-slate-500">Import products from CSV file</p>
+        </div>
+      </div>
         
-        <div className="mt-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select CSV File
-            </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
-              <div className="space-y-1 text-center">
+      <div className="space-y-4">
+        {/* Collapsed file summary when file is selected */}
+        {file && !uploading ? (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold text-slate-800">{file.name}</p>
+                <p className="text-xs text-slate-600">
+                  {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  {file.size > 10 * 1024 * 1024 && (
+                    <span className="ml-2 text-amber-600 font-semibold">• Large file</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setFile(null);
+                setError(null);
+                setStatus(null);
+                setProgress(null);
+                document.getElementById('file-upload').value = null;
+              }}
+              className="text-slate-500 hover:text-rose-600 transition-colors"
+              title="Remove file"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center hover:border-emerald-400 hover:bg-emerald-50/50 transition-all duration-200">
+              <div className="space-y-1">
                 <svg
                   className="mx-auto h-12 w-12 text-gray-400"
                   stroke="currentColor"
@@ -129,10 +175,10 @@ export default function FileUpload({ onUploadComplete }) {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <div className="flex text-sm text-gray-600">
+                <div className="flex justify-center text-sm text-slate-600">
                   <label
                     htmlFor="file-upload"
-                    className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
+                    className="relative cursor-pointer bg-white rounded-md font-medium text-emerald-600 hover:text-emerald-700 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-emerald-500"
                   >
                     <span>Upload a file</span>
                     <input
@@ -147,25 +193,40 @@ export default function FileUpload({ onUploadComplete }) {
                   </label>
                   <p className="pl-1">or drag and drop</p>
                 </div>
-                <p className="text-xs text-gray-500">CSV files only</p>
-                {file && (
-                  <p className="text-sm text-gray-900 font-medium mt-2">
-                    Selected: {file.name}
-                  </p>
-                )}
+                <p className="text-xs text-slate-500 text-center">CSV files only</p>
               </div>
-            </div>
           </div>
+        )}
 
-          <button
-            onClick={handleUpload}
-            disabled={!file || uploading}
-            className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            {uploading ? 'Processing...' : 'Upload CSV'}
-          </button>
+        {/* Upload Button or Processing Badge */}
+        {!uploading ? (
+          <div className="flex justify-center">
+            <button
+              onClick={handleUpload}
+              disabled={!file}
+              className="inline-flex items-center px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-bold rounded-xl hover:from-emerald-600 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload CSV
+            </button>
+          </div>
+        ) : (
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="relative">
+                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+              </div>
+              <span className="text-sm font-bold text-blue-900">Processing Import</span>
+            </div>
+            <p className="text-xs text-center text-blue-700 font-medium">
+              ⚠️ Do not close this page — processing will continue automatically
+            </p>
+          </div>
+        )}
 
-          {error && (
+        {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
@@ -181,39 +242,72 @@ export default function FileUpload({ onUploadComplete }) {
           )}
 
           {status && !error && (
-            <div className="rounded-md bg-blue-50 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium text-blue-800">{status}</p>
-                  {progress && (
-                    <div className="mt-2">
-                      <div className="flex justify-between text-xs text-blue-700 mb-1">
-                        <span>Progress</span>
-                        <span>{getProgressPercentage()}%</span>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-5 shadow-lg">
+                      {/* Stage Indicators */}
+                      <div className="grid grid-cols-4 gap-2 mb-4 text-xs">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                          <span className="font-bold text-emerald-700 text-center">✓ Upload</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                          <span className="font-bold text-emerald-700 text-center">✓ Validated</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                          <span className="font-bold text-blue-700 text-center">▶ Importing</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-2 h-2 bg-slate-300 rounded-full"></div>
+                          <span className="font-medium text-slate-500 text-center">⏳ Finalizing</span>
+                        </div>
                       </div>
-                      <div className="w-full bg-blue-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${getProgressPercentage()}%` }}
-                        ></div>
-                      </div>
-                      {progress.processed && (
-                        <p className="text-xs text-blue-700 mt-1">
-                          Processed: {progress.processed} / {progress.total || 'calculating...'}
-                        </p>
+                      
+                      {/* Main Status */}
+                      <p className="font-bold text-blue-900 mb-3 text-center">{status}</p>
+                      
+                      {progress && (
+                        <>
+                          {/* Progress Bar */}
+                          <div className="mb-3">
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="font-semibold text-slate-700">
+                                Progress: {progress.current.toLocaleString()} / {progress.total.toLocaleString()}
+                              </span>
+                              <span className="font-bold text-blue-600">{getProgressPercentage()}%</span>
+                            </div>
+                            <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300 shadow-md"
+                                style={{ width: `${getProgressPercentage()}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                          
+                          {/* ETA and Batch Info */}
+                          <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                            <div className="bg-white/60 rounded-lg p-2 text-center border border-blue-100">
+                              <p className="text-slate-500 font-medium">Estimated Time</p>
+                              <p className="text-blue-700 font-bold text-sm mt-1">~2-3 min</p>
+                            </div>
+                            <div className="bg-white/60 rounded-lg p-2 text-center border border-blue-100">
+                              <p className="text-slate-500 font-medium">Batch Progress</p>
+                              <p className="text-blue-700 font-bold text-sm mt-1">
+                                {Math.ceil(progress.current / 1000)} / {Math.ceil(progress.total / 1000)}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Info Message */}
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                            <p className="text-xs text-amber-800 text-center font-medium">
+                              💡 Products will appear in the table once import completes
+                            </p>
+                          </div>
+                        </>
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
           )}
-        </div>
       </div>
     </div>
   );
