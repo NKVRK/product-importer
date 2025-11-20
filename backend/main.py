@@ -256,6 +256,27 @@ async def update_product(
     return ProductResponse.model_validate(existing_product)
 
 
+@app.delete("/products/all")
+async def delete_all_products(db: AsyncSession = Depends(get_db)):
+    """
+    Delete ALL products using TRUNCATE for performance.
+    CRITICAL: Uses TRUNCATE TABLE for instant deletion of 500k+ rows.
+    NOTE: This route must be defined BEFORE /products/{product_id} to avoid path conflicts.
+    """
+    try:
+        # Use TRUNCATE for instant deletion (much faster than DELETE for large datasets)
+        await db.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "message": "All products deleted successfully"
+        }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete products: {str(e)}")
+
+
 @app.delete("/products/{product_id}")
 async def delete_product(
     product_id: int,
@@ -280,26 +301,6 @@ async def delete_product(
     await db.commit()
     
     return {"status": "success", "message": "Product deleted successfully"}
-
-
-@app.delete("/products/all")
-async def delete_all_products(db: AsyncSession = Depends(get_db)):
-    """
-    Delete ALL products using TRUNCATE for performance.
-    CRITICAL: Uses TRUNCATE TABLE for instant deletion of 500k+ rows.
-    """
-    try:
-        # Use TRUNCATE for instant deletion (much faster than DELETE for large datasets)
-        await db.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
-        await db.commit()
-        
-        return {
-            "status": "success",
-            "message": "All products deleted successfully"
-        }
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete products: {str(e)}")
 
 
 # ==================== WEBHOOK ENDPOINTS ====================
