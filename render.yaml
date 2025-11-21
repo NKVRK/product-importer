@@ -13,7 +13,8 @@ services:
     name: product-importer-api
     plan: free
     env: python
-    buildCommand: "./build.sh"
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "celery -A celery_app worker --loglevel=info --concurrency=1 & uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
