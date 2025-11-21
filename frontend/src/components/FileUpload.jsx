@@ -110,7 +110,7 @@ export default function FileUpload({ onUploadComplete, onProcessingChange }) {
   }, [taskId, onUploadComplete]);
 
   const getProgressPercentage = () => {
-    if (!progress || !progress.total) return 0;
+    if (!progress || !progress.total || progress.total === 0) return 0;
     return Math.round((progress.current / progress.total) * 100);
   };
 
@@ -278,9 +278,14 @@ export default function FileUpload({ onUploadComplete, onProcessingChange }) {
                 <div className="mb-3">
                   <div className="flex justify-between text-sm mb-2">
                     <span className="font-semibold text-slate-700">
-                      Progress: {progress?.current?.toLocaleString() || 0} / {progress?.total?.toLocaleString() || 0}
+                      {progress?.total > 0 
+                        ? `Progress: ${progress?.current?.toLocaleString() || 0} / ${progress?.total?.toLocaleString() || 0}`
+                        : `Processed: ${progress?.current?.toLocaleString() || 0} products`
+                      }
                     </span>
-                    <span className="font-bold text-blue-600">{getProgressPercentage()}%</span>
+                    {progress?.total > 0 && (
+                      <span className="font-bold text-blue-600">{getProgressPercentage()}%</span>
+                    )}
                   </div>
                   <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
                     <div

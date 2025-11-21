@@ -95,7 +95,7 @@ def process_csv_task(self: Task, file_path: str):
                             state='PROGRESS',
                             meta={
                                 'current': total_processed,
-                                'total': 'unknown',
+                                'total': 0,
                                 'processed': total_processed,
                                 'status': f'Processed {total_processed} products...'
                             }
