@@ -1,7 +1,7 @@
 import os
+import csv
 import time
-import pandas as pd
-import numpy as np
+from datetime import datetime
 import requests
 from celery import Task
 from sqlalchemy import select
@@ -22,64 +22,30 @@ def process_csv_task(self: Task, file_path: str):
     
     chunk_size = 3000
     total_processed = 0
-    total_rows = 0
     start_time = time.time()
     
     try:
-        try:
-            total_rows = sum(1 for _ in open(file_path)) - 1
-        except Exception:
-            self.update_state(
-                state='PROGRESS',
-                meta={'current': 0, 'total': 0, 'status': 'Counting rows...'}
-            )
-        
         db = SessionLocal()
         
         try:
-            for chunk_num, chunk in enumerate(pd.read_csv(file_path, chunksize=chunk_size)):
-                chunk_start = time.time()
+            with open(file_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                records = []
                 
-                chunk = chunk.replace({np.nan: None})
+                for row in reader:
+                    record = {
+                        'sku': row.get('sku', '').strip(),
+                        'name': row.get('name', '').strip(),
+                        'description': row.get('description', '').strip() or None,
+                        'is_active': True
+                    }
+                    records.append(record)
+                    
+                    if len(records) >= chunk_size:
+                        chunk_start = time.time()
                 
-                records = chunk.to_dict('records')
-                
-                if not records:
-                    continue
-                
-                for record in records:
-                    record['is_active'] = True
-                
-                try:
-                    stmt = pg_insert(Product).values(records)
-                    
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=['sku'],
-                        set_={
-                            'name': stmt.excluded.name,
-                            'description': stmt.excluded.description,
-                        }
-                    )
-                    
-                    db.execute(stmt)
-                    db.commit()
-                    
-                    total_processed += len(records)
-                    
-                    chunk_time = time.time() - chunk_start
-                    rows_per_sec = len(records) / chunk_time if chunk_time > 0 else 0
-                    
-                except Exception:
-                    db.rollback()
-                    
-                    for record in records:
                         try:
-                            stmt = pg_insert(Product).values(
-                                sku=record.get('sku'),
-                                name=record.get('name'),
-                                description=record.get('description'),
-                                is_active=True
-                            )
+                            stmt = pg_insert(Product).values(records)
                             
                             stmt = stmt.on_conflict_do_update(
                                 index_elements=['sku'],
@@ -91,21 +57,89 @@ def process_csv_task(self: Task, file_path: str):
                             
                             db.execute(stmt)
                             db.commit()
-                            total_processed += 1
+                            
+                            total_processed += len(records)
+                            
+                            chunk_time = time.time() - chunk_start
+                            rows_per_sec = len(records) / chunk_time if chunk_time > 0 else 0
                             
                         except Exception:
                             db.rollback()
-                            continue
+                            
+                            for record in records:
+                                try:
+                                    stmt = pg_insert(Product).values(
+                                        sku=record.get('sku'),
+                                        name=record.get('name'),
+                                        description=record.get('description'),
+                                        is_active=True
+                                    )
+                                    
+                                    stmt = stmt.on_conflict_do_update(
+                                        index_elements=['sku'],
+                                        set_={
+                                            'name': stmt.excluded.name,
+                                            'description': stmt.excluded.description,
+                                        }
+                                    )
+                                    
+                                    db.execute(stmt)
+                                    db.commit()
+                                    total_processed += 1
+                                    
+                                except Exception:
+                                    db.rollback()
+                                    continue
+                        
+                        self.update_state(
+                            state='PROGRESS',
+                            meta={
+                                'current': total_processed,
+                                'total': 'unknown',
+                                'processed': total_processed,
+                                'status': f'Processed {total_processed} products...'
+                            }
+                        )
+                        
+                        records = []
                 
-                self.update_state(
-                    state='PROGRESS',
-                    meta={
-                        'current': total_processed,
-                        'total': total_rows,
-                        'processed': total_processed,
-                        'status': f'Processed {total_processed}/{total_rows} products...'
-                    }
-                )
+                if records:
+                    chunk_start = time.time()
+                    try:
+                        stmt = pg_insert(Product).values(records)
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=['sku'],
+                            set_={
+                                'name': stmt.excluded.name,
+                                'description': stmt.excluded.description,
+                            }
+                        )
+                        db.execute(stmt)
+                        db.commit()
+                        total_processed += len(records)
+                    except Exception:
+                        db.rollback()
+                        for record in records:
+                            try:
+                                stmt = pg_insert(Product).values(
+                                    sku=record.get('sku'),
+                                    name=record.get('name'),
+                                    description=record.get('description'),
+                                    is_active=True
+                                )
+                                stmt = stmt.on_conflict_do_update(
+                                    index_elements=['sku'],
+                                    set_={
+                                        'name': stmt.excluded.name,
+                                        'description': stmt.excluded.description,
+                                    }
+                                )
+                                db.execute(stmt)
+                                db.commit()
+                                total_processed += 1
+                            except Exception:
+                                db.rollback()
+                                continue
         
         finally:
             db.close()
@@ -118,7 +152,6 @@ def process_csv_task(self: Task, file_path: str):
         result_data = {
             'status': 'completed',
             'total_processed': total_processed,
-            'total_rows': total_rows,
             'message': f'Successfully processed {total_processed} products'
         }
         
@@ -136,7 +169,7 @@ def process_csv_task(self: Task, file_path: str):
                 webhook_payload = {
                     'event': 'import.completed',
                     'data': result_data,
-                    'timestamp': pd.Timestamp.now().isoformat()
+                    'timestamp': datetime.now().isoformat()
                 }
                 
                 for webhook in webhooks:

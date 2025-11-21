@@ -6,9 +6,7 @@ psycopg2-binary==2.9.10
 celery==5.4.0
 redis==5.2.0
 python-multipart
-pandas==2.2.3
 pydantic==2.10.3
-numpy
 httpx==0.28.1
 slowapi==0.1.9
 requests
