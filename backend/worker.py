@@ -23,6 +23,19 @@ def process_csv_task(self: Task, file_path: str):
     chunk_size = 3000
     total_processed = 0
     start_time = time.time()
+    total_rows = 0
+
+    # Pre-calculate total valid rows (with required fields) for accurate progress reporting
+    try:
+        with open(file_path, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                sku = row.get('sku', '').strip()
+                name = row.get('name', '').strip()
+                if sku and name:
+                    total_rows += 1
+    except Exception:
+        total_rows = 0
     
     try:
         db = SessionLocal()
@@ -33,9 +46,14 @@ def process_csv_task(self: Task, file_path: str):
                 records = []
                 
                 for row in reader:
+                    sku = row.get('sku', '').strip()
+                    name = row.get('name', '').strip()
+                    if not sku or not name:
+                        continue
+
                     record = {
-                        'sku': row.get('sku', '').strip(),
-                        'name': row.get('name', '').strip(),
+                        'sku': sku,
+                        'name': name,
                         'description': row.get('description', '').strip() or None,
                         'is_active': True
                     }
@@ -95,7 +113,7 @@ def process_csv_task(self: Task, file_path: str):
                             state='PROGRESS',
                             meta={
                                 'current': total_processed,
-                                'total': 0,
+                                'total': total_rows,
                                 'processed': total_processed,
                                 'status': f'Processed {total_processed} products...'
                             }
@@ -152,6 +170,7 @@ def process_csv_task(self: Task, file_path: str):
         result_data = {
             'status': 'completed',
             'total_processed': total_processed,
+            'total_rows': total_rows,
             'message': f'Successfully processed {total_processed} products'
         }
         

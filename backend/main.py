@@ -173,6 +173,8 @@ async def get_products(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by SKU or name"),
+    sort_by: str = Query("id", pattern="^(id|sku|name)$", description="Sort column"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -193,13 +195,21 @@ async def get_products(
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
+
+    sort_columns = {
+        "id": Product.id,
+        "sku": Product.sku,
+        "name": Product.name,
+    }
+    sort_column = sort_columns.get(sort_by, Product.id)
+    order_clause = sort_column.asc() if sort_order.lower() == "asc" else sort_column.desc()
     
     # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar()
     
     # Get paginated products
-    query = query.offset(offset).limit(limit).order_by(Product.id.desc())
+    query = query.order_by(order_clause).offset(offset).limit(limit)
     result = await db.execute(query)
     products = result.scalars().all()
     
@@ -303,15 +313,20 @@ async def batch_delete_products(
 
 
 @app.delete("/products/all")
-@limiter.limit("3/hour")
 async def delete_all_products(request: Request, db: AsyncSession = Depends(get_db)):
     """
     Delete ALL products using TRUNCATE for performance.
-    CRITICAL: Uses TRUNCATE TABLE for instant deletion of 500k+ rows.
-    Rate limit: 3 deletions per hour
+    Uses TRUNCATE on Postgres and falls back to DELETE for other databases.
     """
     try:
-        await db.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
+        dialect = getattr(getattr(db.bind, "dialect", None), "name", "").lower()
+        if dialect == "postgresql":
+            await db.execute(text("TRUNCATE TABLE products RESTART IDENTITY CASCADE"))
+        else:
+            await db.execute(delete(Product))
+            if dialect == "sqlite":
+                await db.execute(text("DELETE FROM sqlite_sequence WHERE name='products'"))
+        
         await db.commit()
         
         return {

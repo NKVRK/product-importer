@@ -14,6 +14,7 @@ function App() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [totalProducts, setTotalProducts] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [tableSnapshot, setTableSnapshot] = useState(null)
 
   const handleUploadComplete = () => {
     setRefreshTrigger(prev => prev + 1)
@@ -169,24 +170,71 @@ function App() {
                       </button>
                     )}
                   </div>
-                </div>
-                <p className="text-gray-600">Upload and manage product data imported from CSV files</p>
               </div>
+              <p className="text-gray-600">Upload and manage product data imported from CSV files</p>
+            </div>
 
-              {/* File Upload Component */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Total products</p>
+                  <p className="text-3xl font-bold text-slate-900 mt-1">{totalProducts.toLocaleString()}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                  </svg>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Visible on screen</p>
+                  <p className="text-3xl font-bold text-slate-900 mt-1">
+                    {(tableSnapshot?.visible || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Page {tableSnapshot?.page || 1} · {tableSnapshot?.limit || 50} rows
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M5 11h14M5 19h14M5 15h14" />
+                  </svg>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Last synced</p>
+                  <p className="text-lg font-semibold text-slate-900 mt-1">
+                    {tableSnapshot?.lastFetched 
+                      ? new Date(tableSnapshot.lastFetched).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Awaiting data'}
+                  </p>
+                  <p className={`text-xs font-semibold flex items-center gap-1 ${isProcessing ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    <span className={`inline-flex h-2 w-2 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                    {isProcessing ? 'Import in progress' : 'Idle'}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
               <FileUpload 
                 onUploadComplete={handleUploadComplete}
                 onProcessingChange={setIsProcessing}
               />
 
-              {/* Product Table Component */}
               <ProductTable 
                 refreshTrigger={refreshTrigger} 
                 onEdit={handleEditProduct}
                 onTotalChange={setTotalProducts}
+                onSnapshotChange={setTableSnapshot}
               />
 
-              {/* Product Modal */}
               <ProductModal
                 isOpen={isModalOpen}
                 onClose={handleCloseModal}

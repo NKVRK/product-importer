@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -10,6 +10,16 @@ export default function FileUpload({ onUploadComplete, onProcessingChange }) {
   const [status, setStatus] = useState(null);
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
+  const uploadCompleteRef = useRef(onUploadComplete);
+  const processingRef = useRef(onProcessingChange);
+
+  useEffect(() => {
+    uploadCompleteRef.current = onUploadComplete;
+  }, [onUploadComplete]);
+
+  useEffect(() => {
+    processingRef.current = onProcessingChange;
+  }, [onProcessingChange]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -78,17 +88,15 @@ export default function FileUpload({ onUploadComplete, onProcessingChange }) {
           clearInterval(pollInterval);
           setUploading(false);
           setStatus('Upload completed successfully!');
-          setUploading(false);
           setFile(null);
-          setProgress(null);
-          setStatus(null);
-      
-          if (onProcessingChange) {
-            onProcessingChange(false);
+          setTaskId(null);
+
+          if (processingRef.current) {
+            processingRef.current(false);
           }
-      
-          if (onUploadComplete) {
-            onUploadComplete();
+
+          if (uploadCompleteRef.current) {
+            uploadCompleteRef.current();
           }
 
           setTimeout(() => {
@@ -107,7 +115,7 @@ export default function FileUpload({ onUploadComplete, onProcessingChange }) {
     }, 2000);
 
     return () => clearInterval(pollInterval);
-  }, [taskId, onUploadComplete]);
+  }, [taskId]);
 
   const getProgressPercentage = () => {
     if (!progress || !progress.total || progress.total === 0) return 0;

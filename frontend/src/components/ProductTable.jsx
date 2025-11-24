@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) {
+export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, onSnapshotChange }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -17,7 +17,7 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
   const [sortField, setSortField] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -38,30 +38,45 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
 
       const response = await axios.get(`${API_URL}/products`, { params });
       
-      setProducts(response.data.data);
-      setTotal(response.data.total);
-      setTotalPages(response.data.total_pages);
+      const payload = response.data;
+      setProducts(payload.data);
+      setTotal(payload.total);
+      setTotalPages(payload.total_pages);
       
       if (onTotalChange) {
-        onTotalChange(response.data.total);
+        onTotalChange(payload.total);
+      }
+
+      if (onSnapshotChange) {
+        onSnapshotChange({
+          total: payload.total,
+          visible: payload.data.length,
+          page,
+          limit,
+          lastFetched: new Date().toISOString(),
+          hasSearch: Boolean(search)
+        });
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to fetch products');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, search, sortField, sortOrder, onTotalChange, onSnapshotChange]);
 
   useEffect(() => {
     fetchProducts();
-  }, [page, search, refreshTrigger]);
+  }, [fetchProducts, refreshTrigger]);
+
+  useEffect(() => {
+    setSelectedRows([]);
+  }, [page, products]);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    if (searchInput.trim()) {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }
+    const trimmed = searchInput.trim();
+    setSearch(trimmed);
+    setPage(1);
   };
 
   const handlePrevious = () => {
@@ -89,6 +104,12 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
       setSortField(field);
       setSortOrder('asc');
     }
+    setPage(1);
+  };
+  
+  const handleLimitChange = (e) => {
+    setLimit(Number(e.target.value));
+    setPage(1);
   };
   
   const handleSelectAll = (e) => {
@@ -102,6 +123,36 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
   const handleSelectRow = (id) => {
     setSelectedRows(prev => 
       prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
+    );
+  };
+  
+  const renderSortableHeader = (field, label) => {
+    const isActive = sortField === field;
+    const direction = isActive ? sortOrder : null;
+    return (
+      <th
+        scope="col"
+        aria-sort={
+          isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'
+        }
+        className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider"
+      >
+        <button
+          type="button"
+          onClick={() => handleSort(field)}
+          className={`inline-flex items-center gap-1 group ${isActive ? 'text-emerald-600' : 'text-slate-600'}`}
+        >
+          <span>{label}</span>
+          <svg
+            className={`w-4 h-4 transition-transform duration-200 ${isActive && direction === 'asc' ? 'rotate-180' : ''} ${isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-80'}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+          </svg>
+        </button>
+      </th>
     );
   };
   
@@ -130,9 +181,7 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
 
   return (
     <div className="bg-white/80 backdrop-blur-sm shadow-xl rounded-2xl border border-slate-200 overflow-hidden">
-      {/* Toolbar */}
       <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100">
-        {/* Bulk Actions Bar */}
         {selectedRows.length > 0 && (
           <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -156,7 +205,6 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
         )}
         
         <div className="flex justify-between items-center gap-4">
-          {/* Left: Search Bar (Wider) */}
           <div className="flex-1 max-w-2xl">
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative flex-1">
@@ -186,14 +234,28 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
           </form>
         </div>
         
-          {/* Right: Pagination Summary */}
-          <div className="text-sm font-semibold text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200">
-            Showing <span className="text-emerald-600 font-bold">{products.length > 0 ? ((page - 1) * limit + 1) : 0}-{Math.min(page * limit, total)}</span> of <span className="text-emerald-600 font-bold">{total}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-600 font-semibold">Rows:</span>
+              <select
+                value={limit}
+                onChange={handleLimitChange}
+                className="border-2 border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+              >
+                {[25, 50, 100, 250, 500].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="text-sm font-semibold text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200">
+              Showing <span className="text-emerald-600 font-bold">{products.length > 0 ? ((page - 1) * limit + 1) : 0}-{Math.min(page * limit, total)}</span> of <span className="text-emerald-600 font-bold">{total}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Loading State */}
       {loading && (
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -201,26 +263,20 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
         </div>
       )}
 
-      {/* Error State */}
       {error && !loading && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
           {error}
         </div>
       )}
 
-      {/* Products Table */}
       {!loading && !error && (
         <>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-slate-50 to-slate-100">
                 <tr>
-                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    SKU
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
+                  {renderSortableHeader('sku', 'SKU')}
+                  {renderSortableHeader('name', 'Name')}
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
                   </th>
@@ -313,7 +369,6 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange }) 
             </table>
           </div>
 
-          {/* Pagination Footer */}
           {totalPages > 1 && (
             <div className="bg-white px-4 py-3 border-t border-gray-200 flex items-center justify-between">
               <div className="flex-1 flex justify-between sm:hidden">
