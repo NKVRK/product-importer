@@ -31,6 +31,13 @@ class WebhookCreate(BaseModel):
     is_active: bool = Field(default=True, description="Whether webhook is active")
 
 
+class WebhookUpdate(BaseModel):
+    """Schema for updating a webhook"""
+    url: Optional[str] = Field(None, min_length=1, max_length=2048, description="Webhook URL")
+    event_type: Optional[str] = Field(None, description="Event type")
+    is_active: Optional[bool] = Field(None, description="Whether webhook is active")
+
+
 class WebhookResponse(BaseModel):
     """Schema for webhook response"""
     id: int = Field(..., description="Webhook ID")

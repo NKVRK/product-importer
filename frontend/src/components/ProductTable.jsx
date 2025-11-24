@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, onSnapshotChange }) {
+export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, onSnapshotChange, onNotify }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,6 +16,9 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
   const [selectedRows, setSelectedRows] = useState([]);
   const [sortField, setSortField] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
+  const [descriptionInput, setDescriptionInput] = useState('');
+  const [descriptionFilter, setDescriptionFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -34,6 +37,14 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
       if (sortField) {
         params.sort_by = sortField;
         params.sort_order = sortOrder;
+      }
+      
+      if (descriptionFilter) {
+        params.description = descriptionFilter;
+      }
+      
+      if (statusFilter !== 'all') {
+        params.is_active = statusFilter === 'active';
       }
 
       const response = await axios.get(`${API_URL}/products`, { params });
@@ -62,7 +73,7 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, sortField, sortOrder, onTotalChange, onSnapshotChange]);
+  }, [page, limit, search, descriptionFilter, statusFilter, sortField, sortOrder, onTotalChange, onSnapshotChange]);
 
   useEffect(() => {
     fetchProducts();
@@ -109,6 +120,23 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
   
   const handleLimitChange = (e) => {
     setLimit(Number(e.target.value));
+    setPage(1);
+  };
+
+  const handleApplyFilters = () => {
+    setDescriptionFilter(descriptionInput.trim());
+    setPage(1);
+  };
+
+  const handleStatusChange = (value) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setDescriptionInput('');
+    setDescriptionFilter('');
+    setStatusFilter('all');
     setPage(1);
   };
   
@@ -162,8 +190,13 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
         await axios.post(`${API_URL}/products/batch-delete`, selectedRows);
         setSelectedRows([]);
         fetchProducts();
+        if (onNotify) {
+          onNotify('Selected products deleted');
+        }
       } catch (err) {
-        console.error('Failed to delete products:', err);
+        if (onNotify) {
+          onNotify('Failed to delete selected products', 'error');
+        }
       }
     }
   };
@@ -173,8 +206,13 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
       try {
         await axios.delete(`${API_URL}/products/${productId}`);
         fetchProducts();
+        if (onNotify) {
+          onNotify('Product deleted');
+        }
       } catch (err) {
-        console.error('Failed to delete product:', err);
+        if (onNotify) {
+          onNotify('Failed to delete product', 'error');
+        }
       }
     }
   };
@@ -204,36 +242,78 @@ export default function ProductTable({ refreshTrigger, onEdit, onTotalChange, on
           </div>
         )}
         
-        <div className="flex justify-between items-center gap-4">
-          <div className="flex-1 max-w-2xl">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="flex-1 max-w-2xl">
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    id="search"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Search by SKU or Name"
+                    className="block w-full pl-10 pr-3 py-2.5 border-2 border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm"
+                  />
+                </div>
+                {search && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-all"
+                  >
+                    Clear
+                  </button>
+                )}
+              </form>
+            </div>
+            <div className="flex gap-2">
               <input
                 type="text"
-                id="search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by SKU, Name..."
-                className="block w-full pl-10 pr-3 py-2.5 border-2 border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm"
+                value={descriptionInput}
+                onChange={(e) => setDescriptionInput(e.target.value)}
+                placeholder="Filter by description"
+                className="flex-1 min-w-[200px] px-3 py-2 border-2 border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm"
               />
-            </div>
-            {search && (
               <button
                 type="button"
-                onClick={handleClearSearch}
-                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-all"
+                onClick={handleApplyFilters}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all"
               >
-                Clear
+                Apply
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-600 font-semibold">Status:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="border-2 border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            {(descriptionFilter || statusFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-all"
+              >
+                Clear Filters
               </button>
             )}
-          </form>
-        </div>
-        
+          </div>
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-600 font-semibold">Rows:</span>

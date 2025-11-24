@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from celery.result import AsyncResult
 from database import engine, Base, get_db
 from models import Product, Webhook
-from schemas import ProductResponse, ProductCreate, WebhookCreate, WebhookResponse
+from schemas import ProductResponse, ProductCreate, WebhookCreate, WebhookResponse, WebhookUpdate
 from worker import process_csv_task
 
 
@@ -173,6 +173,8 @@ async def get_products(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by SKU or name"),
+    description: Optional[str] = Query(None, description="Filter by description"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
     sort_by: str = Query("id", pattern="^(id|sku|name)$", description="Sort column"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: AsyncSession = Depends(get_db)
@@ -195,6 +197,15 @@ async def get_products(
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
+
+    if description:
+        desc_filter = Product.description.ilike(f"%{description}%")
+        query = query.where(desc_filter)
+        count_query = count_query.where(desc_filter)
+
+    if is_active is not None:
+        query = query.where(Product.is_active == is_active)
+        count_query = count_query.where(Product.is_active == is_active)
 
     sort_columns = {
         "id": Product.id,
@@ -233,16 +244,17 @@ async def create_product(
     """
     Create a new product.
     """
+    sku_normalized = product.sku.strip().lower()
     # Check if SKU already exists
     existing = await db.execute(
-        select(Product).where(Product.sku == product.sku)
+        select(Product).where(Product.sku == sku_normalized)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Product with this SKU already exists")
     
     # Create new product
     new_product = Product(
-        sku=product.sku,
+        sku=sku_normalized,
         name=product.name,
         description=product.description,
         is_active=product.is_active
@@ -273,6 +285,9 @@ async def update_product(
     if not existing_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    incoming_sku = product.sku.strip().lower()
+    if incoming_sku != existing_product.sku:
+        raise HTTPException(status_code=400, detail="SKU cannot be changed")
     # Update fields
     existing_product.name = product.name
     existing_product.description = product.description
@@ -413,6 +428,36 @@ async def delete_webhook(
     await db.commit()
     
     return {"status": "success", "message": "Webhook deleted successfully"}
+
+
+@app.put("/webhooks/{webhook_id}", response_model=WebhookResponse)
+async def update_webhook(
+    webhook_id: int,
+    webhook: WebhookUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update an existing webhook.
+    """
+    result = await db.execute(
+        select(Webhook).where(Webhook.id == webhook_id)
+    )
+    existing_webhook = result.scalar_one_or_none()
+    
+    if not existing_webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    if webhook.url is not None:
+        existing_webhook.url = webhook.url
+    if webhook.event_type is not None:
+        existing_webhook.event_type = webhook.event_type
+    if webhook.is_active is not None:
+        existing_webhook.is_active = webhook.is_active
+    
+    await db.commit()
+    await db.refresh(existing_webhook)
+    
+    return WebhookResponse.model_validate(existing_webhook)
 
 
 @app.post("/webhooks/test")

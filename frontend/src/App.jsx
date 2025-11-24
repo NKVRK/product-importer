@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import axios from 'axios'
 import FileUpload from './components/FileUpload'
 import ProductTable from './components/ProductTable'
@@ -15,6 +15,16 @@ function App() {
   const [totalProducts, setTotalProducts] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
   const [tableSnapshot, setTableSnapshot] = useState(null)
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  const showToast = useCallback((message, type = 'success') => {
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current)
+    }
+    setToast({ message, type })
+    toastTimer.current = setTimeout(() => setToast(null), 3500)
+  }, [])
 
   const handleUploadComplete = () => {
     setRefreshTrigger(prev => prev + 1)
@@ -56,19 +66,28 @@ function App() {
         await axios.delete(`${API_URL}/products/all`)
         setRefreshTrigger(prev => prev + 1)
         setTotalProducts(0)
+        showToast('All products deleted successfully')
       } catch (err) {
-        alert(`Error: ${err.response?.data?.detail || err.message}`)
+        showToast(err.response?.data?.detail || 'Failed to delete products', 'error')
       }
     }
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Top Navigation */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-2xl border-2 animate-slide-in ${
+          toast.type === 'success'
+            ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
+            : 'bg-rose-50 border-rose-500 text-rose-800'
+        }`}>
+          <span className="font-semibold">{toast.message}</span>
+        </div>
+      )}
+
       <header className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between">
-            {/* Logo & Title */}
             <div className="flex items-center gap-3 py-4">
               <div className="bg-white/20 backdrop-blur-sm p-2 rounded-lg">
                 <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
@@ -81,7 +100,6 @@ function App() {
               </div>
             </div>
 
-            {/* Navigation Tabs */}
             <div className="flex gap-1 h-full items-end">
               <button
                 onClick={() => setActiveTab('products')}
@@ -126,13 +144,10 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="min-h-screen">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Products Tab */}
           {activeTab === 'products' && (
             <>
-              {/* Page Header */}
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -147,7 +162,6 @@ function App() {
                     </div>
                   </div>
                   
-                  {/* Action Buttons */}
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setIsModalOpen(true)}
@@ -226,6 +240,7 @@ function App() {
               <FileUpload 
                 onUploadComplete={handleUploadComplete}
                 onProcessingChange={setIsProcessing}
+                onError={(msg) => showToast(msg, 'error')}
               />
 
               <ProductTable 
@@ -233,6 +248,7 @@ function App() {
                 onEdit={handleEditProduct}
                 onTotalChange={setTotalProducts}
                 onSnapshotChange={setTableSnapshot}
+                onNotify={showToast}
               />
 
               <ProductModal
@@ -244,10 +260,8 @@ function App() {
             </>
           )}
 
-          {/* Webhooks Tab */}
           {activeTab === 'webhooks' && (
             <>
-              {/* Page Header */}
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-slate-800">Webhook Configuration</h2>
                 <p className="mt-2 text-sm text-slate-500 flex items-center gap-2">

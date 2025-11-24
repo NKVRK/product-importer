@@ -1,7 +1,7 @@
 import pytest
+import asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from main import app, get_db
 from database import Base
@@ -10,33 +10,42 @@ import os
 import tempfile
 
 # Create in-memory SQLite database for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-engine = create_engine(
+engine = create_async_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TestingSessionLocal = async_sessionmaker(
+    bind=engine,
+    expire_on_commit=False,
+)
 
 
-def override_get_db():
+async def override_get_db():
     """Override database dependency for testing"""
-    try:
-        db = TestingSessionLocal()
+    async with TestingSessionLocal() as db:
         yield db
-    finally:
-        db.close()
 
 
 @pytest.fixture
 def client():
     """Create test client with test database"""
-    Base.metadata.create_all(bind=engine)
+    async def init_models():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    asyncio.run(init_models())
+
     app.dependency_overrides[get_db] = override_get_db
+    if hasattr(app.state, "limiter"):
+        app.state.limiter.reset()
     with TestClient(app) as test_client:
         yield test_client
-    Base.metadata.drop_all(bind=engine)
+    async def drop_models():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+    asyncio.run(drop_models())
     app.dependency_overrides.clear()
 
 
@@ -82,10 +91,22 @@ class TestProductCRUD:
         response = client.post("/products", json=sample_product)
         assert response.status_code == 200
         data = response.json()
-        assert data["sku"] == sample_product["sku"]
+        assert data["sku"] == sample_product["sku"].lower()
         assert data["name"] == sample_product["name"]
         assert data["is_active"] == True
         assert "id" in data
+    
+    def test_create_inactive_product(self, client, sample_product):
+        """Ensure products can be created inactive"""
+        inactive_product = dict(sample_product)
+        inactive_product["sku"] = "TEST-XYZ"
+        inactive_product["is_active"] = False
+        
+        response = client.post("/products", json=inactive_product)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sku"] == "test-xyz"
+        assert data["is_active"] is False
     
     def test_create_duplicate_sku(self, client, sample_product):
         """Test creating product with duplicate SKU fails"""
@@ -110,7 +131,7 @@ class TestProductCRUD:
         data = response.json()
         assert data["total"] == 1
         assert len(data["data"]) == 1
-        assert data["data"][0]["sku"] == sample_product["sku"]
+        assert data["data"][0]["sku"] == sample_product["sku"].lower()
     
     def test_get_products_pagination(self, client):
         """Test product pagination"""
@@ -248,8 +269,9 @@ class TestFileUpload:
         """Test uploading file larger than 100MB fails"""
         # Create a mock large file (we'll simulate the size check)
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-            # Write 101MB of data
-            f.write(b"sku,name,description\n" * (101 * 1024 * 1024 // 25))
+            header = b"sku,name,description\n"
+            f.write(header)
+            f.write(b"a" * (101 * 1024 * 1024))  # Body exceeding 100MB
             f.flush()
             
             with open(f.name, "rb") as file:
@@ -291,21 +313,33 @@ class TestRateLimiting:
     def test_upload_rate_limit(self, client):
         """Test upload endpoint rate limiting (5 per minute)"""
         csv_content = b"sku,name,description\nTEST-001,Product,Desc\n"
-        
+    
         # Make 5 requests (should succeed)
         for i in range(5):
             with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
                 f.write(csv_content)
                 f.flush()
-                
+    
                 with open(f.name, "rb") as file:
                     response = client.post(
                         "/upload",
                         files={"file": (f"test{i}.csv", file, "text/csv")}
                     )
-                
+    
                 os.unlink(f.name)
-                assert response.status_code == 200
+            assert response.status_code == 200
+        
+        # Sixth request should be rate limited
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            f.write(csv_content)
+            f.flush()
+            with open(f.name, "rb") as file:
+                response = client.post(
+                    "/upload",
+                    files={"file": ("test-final.csv", file, "text/csv")}
+                )
+            os.unlink(f.name)
+        assert response.status_code == 429
         
         # 6th request should be rate limited
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:

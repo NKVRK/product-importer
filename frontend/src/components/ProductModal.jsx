@@ -69,16 +69,13 @@ export default function ProductModal({ isOpen, onClose, onSubmit, initialData })
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Overlay */}
       <div 
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       ></div>
 
-      {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          {/* Header */}
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-bold text-gray-900">
               {isEditMode ? 'Edit Product' : 'Add New Product'}
@@ -91,9 +88,7 @@ export default function ProductModal({ isOpen, onClose, onSubmit, initialData })
             </button>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* SKU */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 SKU <span className="text-red-500">*</span>
@@ -114,7 +109,6 @@ export default function ProductModal({ isOpen, onClose, onSubmit, initialData })
               )}
             </div>
 
-            {/* Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Name <span className="text-red-500">*</span>
@@ -134,7 +128,6 @@ export default function ProductModal({ isOpen, onClose, onSubmit, initialData })
               )}
             </div>
 
-            {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Description
@@ -149,7 +142,6 @@ export default function ProductModal({ isOpen, onClose, onSubmit, initialData })
               />
             </div>
 
-            {/* Is Active */}
             <div className="flex items-center">
               <input
                 type="checkbox"
@@ -164,7 +156,6 @@ export default function ProductModal({ isOpen, onClose, onSubmit, initialData })
               </label>
             </div>
 
-            {/* Buttons */}
             <div className="flex gap-3 pt-4">
               <button
                 type="button"

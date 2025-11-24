@@ -10,6 +10,8 @@ export default function WebhookManager() {
   const [testResults, setTestResults] = useState({});
   const [toast, setToast] = useState(null);
   const [urlError, setUrlError] = useState('');
+  const [editingWebhook, setEditingWebhook] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -53,22 +55,34 @@ export default function WebhookManager() {
       setUrlError('This webhook URL already exists');
       return;
     }
-
     try {
       setUrlError('');
-      await axios.post(`${API_URL}/webhooks`, {
-        url: trimmedUrl,
-        event_type: 'import.completed',
-        is_active: true
-      });
+      setIsSaving(true);
+      if (editingWebhook) {
+        await axios.put(`${API_URL}/webhooks/${editingWebhook.id}`, {
+          url: trimmedUrl,
+          event_type: editingWebhook.event_type,
+          is_active: editingWebhook.is_active
+        });
+        showToast('Webhook updated successfully', 'success');
+      } else {
+        await axios.post(`${API_URL}/webhooks`, {
+          url: trimmedUrl,
+          event_type: 'import.completed',
+          is_active: true
+        });
+        showToast('✓ Webhook added successfully!', 'success');
+      }
       
       setNewUrl('');
-      showToast('✓ Webhook added successfully!', 'success');
+      setEditingWebhook(null);
       fetchWebhooks();
     } catch (err) {
-      const errorMsg = err.response?.data?.detail || 'Failed to add webhook';
+      const errorMsg = err.response?.data?.detail || 'Failed to save webhook';
       setUrlError(errorMsg);
       showToast(errorMsg, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -123,7 +137,6 @@ export default function WebhookManager() {
 
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-      {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-2xl border-2 animate-slide-in ${
           toast.type === 'success' 
@@ -145,7 +158,6 @@ export default function WebhookManager() {
         </div>
       )}
       
-      {/* Add Webhook Form */}
       <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-4 border-b border-slate-200">
         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
           <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -176,12 +188,24 @@ export default function WebhookManager() {
                 </p>
               )}
             </div>
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 font-bold text-sm transition-all duration-200 shadow-lg shadow-emerald-500/30 hover:shadow-xl whitespace-nowrap h-[42px] flex items-center justify-center"
-            >
-              Add Webhook
-            </button>
+            <div className="flex gap-2">
+              {editingWebhook && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-4 py-2.5 bg-slate-200 text-slate-700 rounded-xl font-semibold text-sm h-[42px]"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 font-bold text-sm transition-all duration-200 shadow-lg shadow-emerald-500/30 hover:shadow-xl whitespace-nowrap h-[42px] flex items-center justify-center disabled:opacity-60"
+              >
+                {editingWebhook ? 'Save Changes' : 'Add Webhook'}
+              </button>
+            </div>
           </div>
           <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-600">
@@ -200,11 +224,12 @@ export default function WebhookManager() {
             </div>
           </div>
         </form>
+        {editingWebhook && (
+          <p className="text-xs text-amber-600 mt-2">Editing webhook #{editingWebhook.id}. Update the URL or status below.</p>
+        )}
       </div>
 
       <div className="border-t border-gray-200 pt-6">
-
-      {/* Webhooks List */}
       {loading ? (
         <div className="text-center py-8">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -212,7 +237,6 @@ export default function WebhookManager() {
         </div>
       ) : webhooks.length === 0 ? (
         <div className="p-6">
-          {/* Empty State with Structure Preview */}
           <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-8 border-2 border-dashed border-slate-300">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -226,11 +250,9 @@ export default function WebhookManager() {
               </p>
             </div>
             
-            {/* Enhanced Preview Structure */}
             <div className="bg-white/50 rounded-lg p-4 space-y-2.5">
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Preview Structure</div>
               
-              {/* Row 1 - Most visible */}
               <div className="flex items-center gap-3 opacity-50">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-sm"></div>
                 <div className="flex-1 space-y-1">
@@ -243,7 +265,6 @@ export default function WebhookManager() {
                 </div>
               </div>
               
-              {/* Row 2 - Medium fade */}
               <div className="flex items-center gap-3 opacity-35">
                 <div className="w-2 h-2 bg-slate-300 rounded-full"></div>
                 <div className="flex-1 space-y-1">
@@ -256,7 +277,6 @@ export default function WebhookManager() {
                 </div>
               </div>
               
-              {/* Row 3 - Most faded */}
               <div className="flex items-center gap-3 opacity-20">
                 <div className="w-2 h-2 bg-slate-300 rounded-full"></div>
                 <div className="flex-1 space-y-1">
@@ -320,7 +340,6 @@ export default function WebhookManager() {
                     Added: {new Date(webhook.created_at).toLocaleString()}
                   </p>
                   
-                  {/* Test Result */}
                   {testResults[webhook.id] && (
                     <div className={`mt-2 p-2 rounded text-sm ${
                       testResults[webhook.id].loading
@@ -346,7 +365,19 @@ export default function WebhookManager() {
                   )}
                 </div>
                 
-                <div className="flex gap-2 ml-4">
+                <div className="flex flex-wrap gap-2 ml-4 justify-end">
+                  <button
+                    onClick={() => handleToggleActive(webhook)}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${webhook.is_active ? 'bg-slate-100 text-slate-700' : 'bg-emerald-100 text-emerald-700'} border border-slate-200`}
+                  >
+                    {webhook.is_active ? 'Disable' : 'Enable'}
+                  </button>
+                  <button
+                    onClick={() => handleEdit(webhook)}
+                    className="px-4 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-lg font-semibold text-sm hover:bg-emerald-50 transition-colors"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={() => handleTest(webhook.url, webhook.id)}
                     disabled={testResults[webhook.id]?.loading}
@@ -372,3 +403,26 @@ export default function WebhookManager() {
     </div>
   );
 }
+  const handleToggleActive = async (webhook) => {
+    try {
+      await axios.put(`${API_URL}/webhooks/${webhook.id}`, {
+        is_active: !webhook.is_active
+      });
+      fetchWebhooks();
+      showToast(`Webhook ${!webhook.is_active ? 'enabled' : 'disabled'}`, 'success');
+    } catch (err) {
+      showToast('Failed to update webhook status', 'error');
+    }
+  };
+
+  const handleEdit = (webhook) => {
+    setEditingWebhook(webhook);
+    setNewUrl(webhook.url);
+    setUrlError('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingWebhook(null);
+    setNewUrl('');
+    setUrlError('');
+  };

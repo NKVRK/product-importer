@@ -121,7 +121,7 @@ def generate_csv(num_rows=500000, output_file='products_500k.csv'):
     
     # Write CSV with streaming to handle large files efficiently
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['sku', 'name', 'description']
+        fieldnames = ['sku', 'name', 'description', 'is_active']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
         # Write header
@@ -132,7 +132,8 @@ def generate_csv(num_rows=500000, output_file='products_500k.csv'):
             row = {
                 'sku': generate_sku(i),
                 'name': generate_product_name(),
-                'description': generate_description()
+                'description': generate_description(),
+                'is_active': 'true' if random.random() > 0.2 else 'false'
             }
             writer.writerow(row)
             

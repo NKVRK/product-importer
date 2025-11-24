@@ -25,6 +25,16 @@ def process_csv_task(self: Task, file_path: str):
     start_time = time.time()
     total_rows = 0
 
+    def parse_active(value):
+        if value is None:
+            return True
+        normalized = str(value).strip().lower()
+        if normalized in {'false', '0', 'no', 'inactive'}:
+            return False
+        if normalized in {'true', '1', 'yes', 'active'}:
+            return True
+        return True
+
     # Pre-calculate total valid rows (with required fields) for accurate progress reporting
     try:
         with open(file_path, 'r', encoding='utf-8') as csvfile:
@@ -52,10 +62,10 @@ def process_csv_task(self: Task, file_path: str):
                         continue
 
                     record = {
-                        'sku': sku,
+                        'sku': sku.lower(),
                         'name': name,
                         'description': row.get('description', '').strip() or None,
-                        'is_active': True
+                        'is_active': parse_active(row.get('is_active'))
                     }
                     records.append(record)
                     
@@ -90,7 +100,7 @@ def process_csv_task(self: Task, file_path: str):
                                         sku=record.get('sku'),
                                         name=record.get('name'),
                                         description=record.get('description'),
-                                        is_active=True
+                                        is_active=record.get('is_active', True)
                                     )
                                     
                                     stmt = stmt.on_conflict_do_update(
@@ -143,7 +153,7 @@ def process_csv_task(self: Task, file_path: str):
                                     sku=record.get('sku'),
                                     name=record.get('name'),
                                     description=record.get('description'),
-                                    is_active=True
+                                    is_active=record.get('is_active', True)
                                 )
                                 stmt = stmt.on_conflict_do_update(
                                     index_elements=['sku'],
@@ -167,6 +177,12 @@ def process_csv_task(self: Task, file_path: str):
         except Exception:
             pass
         
+        # Fail fast when the CSV provided no usable sku/name data.
+        if total_rows == 0:
+            raise ValueError("CSV contained no valid rows. Ensure the file has sku and name values.")
+        if total_processed == 0:
+            raise ValueError("No products were imported. Verify rows include sku and name values.")
+
         result_data = {
             'status': 'completed',
             'total_processed': total_processed,
@@ -200,15 +216,7 @@ def process_csv_task(self: Task, file_path: str):
         
         return result_data
     
-    except Exception as e:
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'error': str(e),
-                'total_processed': total_processed,
-                'status': 'Failed'
-            }
-        )
+    except Exception:
         raise
 
 
